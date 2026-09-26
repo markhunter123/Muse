@@ -1,0 +1,16 @@
+Muse macOS first launch
+
+Official GitHub Release builds are Developer ID-signed and notarized. After
+moving Muse.app to Applications, the app should open without extra steps.
+
+If you are using a local or unsigned build and macOS says the app is damaged
+or does not open, open Terminal and run:
+
+xattr -r -d com.apple.quarantine /Applications/Muse.app
+
+Use this only for an app obtained from a trusted Muse source. It removes
+only Apple's quarantine attribute from Muse.app. Signed and notarized
+builds do not need it.
+
+The macOS ZIP package also includes Muse-macOS-open.command, which can
+clear the same attribute and launch the app after installation.

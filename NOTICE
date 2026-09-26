@@ -1,0 +1,48 @@
+Muse
+====
+
+This work is a modified version of PI-Desktop.
+
+    Upstream project : PI-Desktop
+    Upstream source  : https://github.com/vastsa/PI-Desktop
+    Upstream author  : vastsa <hhxk666@gmail.com> and PI-Desktop contributors
+    Upstream license : GNU Lesser General Public License v3.0 or later
+
+Muse is a rebranded fork. The modifications consist of renaming the product and
+its identifiers — application id, package scope, crate binary, environment
+variable prefixes, plugin ids, storage paths, packaging artifact names, and the
+associated user-facing strings and documentation. Functional behaviour is
+unchanged from the upstream commit this fork was taken from.
+
+    Modification date : 2026-09-26
+
+Copyright in the upstream work remains with vastsa and the PI-Desktop
+contributors. Copyright in the modifications made by this fork remains with the
+Muse contributors. Nothing in this notice transfers or reassigns upstream
+copyright.
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Lesser General Public License for more details.
+
+The full license text is in the LICENSE file in this directory.
+
+Third-party components
+----------------------
+
+This repository vendors or depends on third-party work that carries its own
+attribution. These notices are part of the distribution and must be preserved:
+
+  * The agent runtime is built on the pi ecosystem by Mario Zechner
+    (badlogic/pi-mono), consumed through the @earendil-works/pi-* packages.
+    See the "Acknowledgements" section of README.md.
+
+  * apps/desktop/resources/plugins/muse.file-manager/ is a vendored copy of a
+    plugin by Tioit-Wang, used under the MIT License. Its LICENSE and
+    UPSTREAM.md files are retained verbatim; UPSTREAM.md records the upstream
+    revision and every local change made to it.
