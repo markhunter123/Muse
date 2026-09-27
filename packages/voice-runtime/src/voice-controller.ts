@@ -1,12 +1,14 @@
 import { EventEmitter } from "node:events";
 import { PcmChunker } from "./pcm-chunker.js";
 import { convertFrames, computeRms } from "./pcm-utils.js";
-import { TranscriptionEngine } from "./transcription-engine.js";
+import { VoiceRecognizerError } from "./types.js";
 import type {
   AudioCapture,
   AudioCaptureFactory,
+  SpeechRecognizer,
   TranscribeOptions,
   TranscriptionStream,
+  VoiceErrorCode,
   VoicePhase,
   VoiceResult,
   VoiceSettings,
@@ -38,7 +40,7 @@ export class VoiceController extends EventEmitter {
   private disposed = false;
 
   constructor(
-    private readonly engine: TranscriptionEngine,
+    private readonly recognizer: SpeechRecognizer,
     private readonly captureFactory: AudioCaptureFactory,
     private readonly getSettings: () => VoiceSettings,
   ) {
@@ -49,23 +51,24 @@ export class VoiceController extends EventEmitter {
     return this._state;
   }
 
-  /** Pre-load the model for faster first recording. */
+  /** Get the recognizer ready — load the model, check the credentials. */
   async prepare(): Promise<void> {
     if (this.disposed) return;
 
     const settings = this.getSettings();
-    if (!settings.modelId) {
-      throw new Error("No model selected");
-    }
-
     this.setState({ phase: "preparing", durationSeconds: 0, volumeLevel: 0 });
 
     try {
-      await this.engine.modelManager.ensureLoaded(settings.modelId);
+      await this.recognizer.prepare(settings);
       this.setState({ phase: "ready", durationSeconds: 0, volumeLevel: 0 });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.setState({ phase: "error", durationSeconds: 0, volumeLevel: 0, error: message });
+      this.settle({
+        phase: "error",
+        durationSeconds: 0,
+        volumeLevel: 0,
+        error: error instanceof Error ? error.message : String(error),
+        errorCode: errorCodeOf(error),
+      });
       throw error;
     }
   }
@@ -80,14 +83,21 @@ export class VoiceController extends EventEmitter {
     }
 
     const settings = this.getSettings();
-    if (!settings.modelId) throw new Error("No model selected");
 
     this.abort = new AbortController();
+    // Held locally because `cancel()` clears `this.abort` and `this.capture`.
+    // Both awaits below cross a boundary the user can cancel across — the
+    // overlay's Cancel button is live during "starting" — and without these
+    // checks the continuation would resurrect "listening" over a session that
+    // had already been torn down, leaving a capture nobody owns.
+    const abort = this.abort;
 
-    // Prepare model if not ready
+    // Readying the recognizer also decides whether this recording can happen
+    // at all, so it runs before the capture opens rather than after.
     if (phase !== "ready") {
       await this.prepare();
     }
+    if (abort.signal.aborted) return;
 
     this.setState({ phase: "starting", durationSeconds: 0, volumeLevel: 0 });
 
@@ -97,7 +107,7 @@ export class VoiceController extends EventEmitter {
         language: settings.languages[0] ?? "en",
         chineseVariant: settings.chineseVariant,
       };
-      this.stream = this.engine.createStream(transcribeOpts);
+      this.stream = this.recognizer.createStream(transcribeOpts);
 
       // Set up PCM chunker for streaming
       this.chunker = new PcmChunker((chunk) => {
@@ -108,8 +118,9 @@ export class VoiceController extends EventEmitter {
       this.allFrames = [];
 
       // Create and start capture
-      this.capture = this.captureFactory.create(settings.deviceId);
-      this.capture.onFrame((frame) => {
+      const capture = this.captureFactory.create(settings.deviceId);
+      this.capture = capture;
+      capture.onFrame((frame) => {
         if (this._state.phase !== "listening") return;
 
         // Collect Int16 frame for batch fallback
@@ -137,13 +148,25 @@ export class VoiceController extends EventEmitter {
         this.emit("volumeLevel", rms);
       });
 
-      await this.capture.start();
+      await capture.start();
+      if (abort.signal.aborted) {
+        // Cancelled while the device was opening. `cancel()` could not stop a
+        // capture that had not started yet, so the device is still ours to
+        // release.
+        capture.cancel();
+        return;
+      }
       this.startedAt = performance.now();
       this.setState({ phase: "listening", durationSeconds: 0, volumeLevel: 0 });
     } catch (error) {
       this.cleanup();
-      const message = error instanceof Error ? error.message : String(error);
-      this.setState({ phase: "error", durationSeconds: 0, volumeLevel: 0, error: message });
+      this.settle({
+        phase: "error",
+        durationSeconds: 0,
+        volumeLevel: 0,
+        error: error instanceof Error ? error.message : String(error),
+        errorCode: errorCodeOf(error),
+      });
       throw error;
     }
   }
@@ -193,7 +216,7 @@ export class VoiceController extends EventEmitter {
         language: settings.languages[0] ?? "en",
       };
 
-      this.setState({
+      this.settle({
         phase: "done",
         durationSeconds: speechSeconds,
         volumeLevel: 0,
@@ -204,12 +227,12 @@ export class VoiceController extends EventEmitter {
       return result;
     } catch (error) {
       this.cleanup();
-      const message = error instanceof Error ? error.message : String(error);
-      this.setState({
+      this.settle({
         phase: "error",
         durationSeconds: speechSeconds,
         volumeLevel: 0,
-        error: message,
+        error: error instanceof Error ? error.message : String(error),
+        errorCode: errorCodeOf(error),
       });
       throw error;
     }
@@ -241,7 +264,7 @@ export class VoiceController extends EventEmitter {
 
   private async batchTranscribe(settings: VoiceSettings): Promise<string> {
     const pcm = convertFrames(this.allFrames);
-    return this.engine.transcribe(
+    return this.recognizer.transcribe(
       pcm,
       {
         language: settings.languages[0] ?? "en",
@@ -263,4 +286,28 @@ export class VoiceController extends EventEmitter {
     this._state = state;
     this.emit("stateChange", state);
   }
+
+  /**
+   * Report a terminal state and leave the controller idle.
+   *
+   * "done" and "error" end a *session*, not the controller — the next press has
+   * to be able to start a new one. Parking the phase there instead made the
+   * second attempt fail with "Cannot start from phase: done" (or `: error`
+   * after a refused one) until the app restarted, so a user could dictate
+   * exactly once. The renderer shows the transcript or the error on its own
+   * timer; this is the machine's state, not the notification.
+   */
+  private settle(state: VoiceState): void {
+    this.emit("stateChange", state);
+    this._state = { ...INITIAL_STATE };
+  }
+}
+
+/**
+ * Only a recognizer's own errors carry a code. Anything else — a capture
+ * failure, a bug — stays code-less so the UI shows its message rather than
+ * inventing a translation for a failure nobody anticipated.
+ */
+function errorCodeOf(error: unknown): VoiceErrorCode | undefined {
+  return error instanceof VoiceRecognizerError ? error.code : undefined;
 }

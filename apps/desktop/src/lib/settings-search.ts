@@ -129,7 +129,8 @@ export const SETTINGS_NAV: SettingsNavEntry[] = [
     labelKey: "settings.nav.voice",
     titleKey: "settings.voice",
     group: "preferences",
-    developerOnly: true,
+    // Not `developerOnly`: voice input ships enabled, so its settings have to be
+    // reachable without turning developer mode on first.
     experimentalBadgeKey: "settings.voiceExperimental",
     keywordKeys: [
       "settings.voiceEnable",

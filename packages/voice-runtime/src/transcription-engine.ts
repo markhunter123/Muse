@@ -1,13 +1,31 @@
 import { isChineseLanguage, convertChineseOutput } from "./chinese.js";
 import type { ModelManager } from "./model-manager.js";
-import type { TranscribeOptions, TranscriptionStream, ChineseVariant } from "./types.js";
+import {
+  VoiceRecognizerError,
+  type SpeechRecognizer,
+  type TranscribeOptions,
+  type TranscriptionStream,
+  type ChineseVariant,
+  type VoiceSettings,
+} from "./types.js";
 
 /**
  * Wraps transcribe-cpp to provide a simpler transcription API.
  * Handles model lifecycle through ModelManager.
+ *
+ * The local half of {@link SpeechRecognizer}: where the cloud recognizer fails
+ * `prepare` on a missing credential, this one fails it on a missing model.
  */
-export class TranscriptionEngine {
+export class TranscriptionEngine implements SpeechRecognizer {
   constructor(readonly modelManager: ModelManager) {}
+
+  /** Load the configured model, or explain which one is missing. */
+  async prepare(settings: VoiceSettings): Promise<void> {
+    if (!settings.modelId) {
+      throw new VoiceRecognizerError("noModel", "No model selected");
+    }
+    await this.modelManager.ensureLoaded(settings.modelId);
+  }
 
   /**
    * Transcribe a complete PCM audio buffer.
@@ -19,7 +37,7 @@ export class TranscriptionEngine {
     signal?: AbortSignal,
   ): Promise<string> {
     const modelId = this.modelManager.getLoadedModelId();
-    if (!modelId) throw new Error("No model loaded");
+    if (!modelId) throw new VoiceRecognizerError("noModel", "No model loaded");
 
     const model = this.modelManager.getLoadedModel() as any;
     if (!model) throw new Error("Model instance not available");

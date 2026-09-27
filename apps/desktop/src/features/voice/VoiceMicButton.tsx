@@ -1,8 +1,17 @@
 /**
  * Microphone button for the Composer toolbar.
+ *
+ * The button is the recording indicator: it turns red and pulses while a
+ * capture is live, the way a hold-to-talk control does, rather than leaning on
+ * the overlay above the composer. The overlay is left to the states that need
+ * words — transcribing and error.
+ *
+ * Clicking always toggles. It used to call `onCancel` while active, so a click
+ * meant to stop-and-transcribe silently threw the recording away.
  */
 
 import type { TFunction } from "i18next";
+import { IconMic } from "../../components/icons";
 import { TooltipButton } from "../../components/ui";
 import type { VoicePhase } from "./useVoiceInput";
 
@@ -11,100 +20,48 @@ interface VoiceMicButtonProps {
   phase: VoicePhase;
   disabled: boolean;
   onToggle: () => void;
-  onCancel: () => void;
 }
 
-export function VoiceMicButton({
-  t,
-  phase,
-  disabled,
-  onToggle,
-  onCancel,
-}: VoiceMicButtonProps) {
-  const isActive =
-    phase === "starting" ||
-    phase === "listening" ||
-    phase === "transcribing";
+/** Phases in which a capture is open or on its way up. */
+const RECORDING_PHASES: readonly VoicePhase[] = ["preparing", "starting", "listening"];
 
-  const tooltip = isActive
-    ? t("settings.voiceCancel")
-    : t("settings.voiceRecording").replace("…", "");
+export function VoiceMicButton({ t, phase, disabled, onToggle }: VoiceMicButtonProps) {
+  const isRecording = RECORDING_PHASES.includes(phase);
+  const isTranscribing = phase === "transcribing";
+
+  // The idle label used to be derived by stripping the ellipsis off
+  // `settings.voiceRecording`, which reads "Listening…" — so the button
+  // claimed to be listening whenever it was not.
+  const label = isRecording
+    ? t("chat.stopDictation")
+    : isTranscribing
+      ? t("settings.voiceTranscribing")
+      : t("chat.dictate");
 
   return (
     <TooltipButton
       type="button"
-      className={`icon-btn${isActive ? " voice-active" : ""}`}
-      tooltip={tooltip}
-      ariaLabel={tooltip}
-      disabled={disabled && !isActive}
-      onClick={isActive ? onCancel : onToggle}
+      className={`icon-btn icon-btn-square${isRecording ? " voice-active" : ""}`}
+      tooltip={label}
+      ariaLabel={label}
+      aria-pressed={isRecording || isTranscribing}
+      aria-busy={isTranscribing ? "true" : undefined}
+      // A live capture stays clickable even if the composer blocks its
+      // controls mid-session: without that there would be no way to stop.
+      disabled={disabled && !isRecording && !isTranscribing}
+      onClick={onToggle}
     >
-      <MicIcon active={isActive} phase={phase} />
-    </TooltipButton>
-  );
-}
-
-function MicIcon({ active, phase }: { active: boolean; phase: VoicePhase }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-      className={active ? "voice-mic-active" : undefined}
-    >
-      {/* Microphone body */}
-      <rect
-        x="5.5"
-        y="1.5"
-        width="5"
-        height="8"
-        rx="2.5"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        fill={active ? "currentColor" : "none"}
-      />
-      {/* Stand arc */}
-      <path
-        d="M3.5 7.5a4.5 4.5 0 0 0 9 0"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        fill="none"
-      />
-      {/* Stand line */}
-      <line
-        x1="8"
-        y1="12"
-        x2="8"
-        y2="14"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-      {/* Base */}
-      <line
-        x1="6"
-        y1="14"
-        x2="10"
-        y2="14"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-      {/* Recording indicator */}
-      {phase === "listening" && (
-        <circle cx="13" cy="3" r="2.5" fill="var(--color-danger, #ef4444)">
-          <animate
-            attributeName="opacity"
-            values="1;0.3;1"
-            dur="1.2s"
-            repeatCount="indefinite"
-          />
-        </circle>
+      {/* The wait for a transcript is shown here rather than in a panel above
+          the composer — that panel covered the line being dictated into. */}
+      {isTranscribing ? (
+        <span className="voice-spinner" aria-hidden="true" />
+      ) : (
+        <IconMic
+          size={15}
+          aria-hidden="true"
+          className={isRecording ? "voice-mic-active" : undefined}
+        />
       )}
-    </svg>
+    </TooltipButton>
   );
 }

@@ -6,9 +6,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { TFunction } from "i18next";
 import type { AppSettings, VoiceInputSettings } from "@muse/shared";
+import { resolveVoiceInputSettings } from "@muse/shared";
 import { Button, Badge, CheckboxGroup, SettingsToggle } from "../../../components/ui";
 import { SettingsMenuSelect } from "../../../components/settings/SettingsMenuSelect";
 import { SettingsRow, SettingsCard } from "../primitives";
+import { VoiceCredentialsCard } from "./VoiceCredentialsCard";
 import { voiceIpc } from "../../voice/voice-ipc";
 
 interface AudioInputDevice {
@@ -41,13 +43,7 @@ export function VoiceSettingsSection({
   settings: AppSettings;
   saveSettings: (patch: Partial<AppSettings>) => Promise<void>;
 }) {
-  const voice: VoiceInputSettings = settings.voice ?? {
-    enabled: false,
-    deviceId: null,
-    languages: ["zh", "en"],
-    chineseVariant: "simplified" as const,
-    modelId: "",
-  };
+  const voice: VoiceInputSettings = resolveVoiceInputSettings(settings.voice);
 
   const [devices, setDevices] = useState<AudioInputDevice[]>([]);
   const [models, setModels] = useState<ModelState[]>([]);
@@ -150,6 +146,23 @@ export function VoiceSettingsSection({
 
       {/* ---- Input ---- */}
       <SettingsCard title={t("settings.voiceMicrophone")}>
+        <SettingsRow title={t("settings.voiceProvider")}>
+          <SettingsMenuSelect
+            value={voice.provider}
+            label={t("settings.voiceProvider")}
+            disabled={!voice.enabled}
+            options={[
+              { id: "tencent", label: t("settings.voiceProviderTencent") },
+              { id: "local", label: t("settings.voiceProviderLocal") },
+            ]}
+            onChange={(id) => {
+              if (id === "tencent" || id === "local") {
+                save({ provider: id });
+              }
+            }}
+          />
+        </SettingsRow>
+
         <SettingsRow
           title={t("settings.voiceMicrophone")}
           detail={deviceLoadError ? t("settings.voiceMicUnavailable") : undefined}
@@ -205,7 +218,13 @@ export function VoiceSettingsSection({
         </SettingsRow>
       </SettingsCard>
 
-      {/* ---- Model ---- */}
+      {/* ---- Recognizer configuration ----
+           Only one of the two is ever relevant: the cloud service takes
+           credentials and the local one takes a model, and showing both would
+           invite configuring the pair that is not running. */}
+      {voice.provider === "tencent" ? (
+        <VoiceCredentialsCard t={t} enabled={voice.enabled} />
+      ) : (
       <SettingsCard title={t("settings.voiceModel")}>
         <SettingsRow title={t("settings.voiceModel")}>
           <SettingsMenuSelect
@@ -295,6 +314,7 @@ export function VoiceSettingsSection({
           </SettingsRow>
         ))}
       </SettingsCard>
+      )}
     </div>
   );
 }

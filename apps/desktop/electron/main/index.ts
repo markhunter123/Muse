@@ -1228,7 +1228,12 @@ runtimeLifecycle = createRuntimeLifecycle({
 });
 const { bootHostStatus, runtimeArch, bootBackends } = runtimeLifecycle;
 
-const voiceService = createVoiceService(dataDir + "/voice-models", () => mainWindow);
+const voiceService = createVoiceService({
+  modelCacheDir: dataDir + "/voice-models",
+  getWindow: () => mainWindow,
+  getHost: () => host,
+  log: (level, message, fields) => logger.app("runtime", level, message, fields),
+});
 
 function registerIpc() {
   return registerIpcHandlers({

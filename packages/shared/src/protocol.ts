@@ -91,6 +91,14 @@ export const IPC = {
     voiceUpdateSettings: "muse/voice/updateSettings",
     voiceCheckPermission: "muse/voice/checkPermission",
     voiceRequestPermission: "muse/voice/requestPermission",
+    /**
+     * Credential writes only. There is deliberately no read channel: a stored
+     * secret never travels back to the renderer, which is why the settings form
+     * shows whether one is set rather than what it is.
+     */
+    voiceSetCredentials: "muse/voice/setCredentials",
+    voiceClearCredentials: "muse/voice/clearCredentials",
+    voiceCredentialStatus: "muse/voice/credentialStatus",
     agentCompact: "muse/agent/compact",
     agentAbort: "muse/agent/abort",
     agentStop: "muse/agent/stop",

@@ -66,7 +66,6 @@ export type ComposerToolbarProps = {
   voicePhase: VoicePhase;
   voiceEnabled: boolean;
   onVoiceToggle: () => void;
-  onVoiceCancel: () => void;
 };
 
 /** Composer controls: mode, permission, model, enhancement, and send/stop. */
@@ -105,7 +104,6 @@ export function ComposerToolbar({
   voicePhase,
   voiceEnabled,
   onVoiceToggle,
-  onVoiceCancel,
 }: ComposerToolbarProps) {
   const platform = (window.museDesktop?.platform ?? "darwin") as ShortcutPlatform;
   const steeringShortcut = keybindingDisplayParts("Alt+Enter", platform).join("+");
@@ -127,15 +125,6 @@ export function ComposerToolbar({
             <IconPlus size={15} aria-hidden="true" />
           </TooltipButton>
         </div>
-        {voiceEnabled && (
-          <VoiceMicButton
-            t={t}
-            phase={voicePhase}
-            disabled={controlsBlocked}
-            onToggle={onVoiceToggle}
-            onCancel={onVoiceCancel}
-          />
-        )}
         <TooltipButton
           type="button"
           className="icon-btn mode-chip composer-mode-chip"
@@ -239,6 +228,17 @@ export function ComposerToolbar({
             <IconUndo2 size={15} aria-hidden="true" />
           </TooltipButton>
         ) : null}
+        {/* The mic is a peer of send, never inside it — the send slot stays one
+            control. Placed ahead of the run-active ternary so it keeps its
+            position whether the slot shows send or stop. */}
+        {voiceEnabled && (
+          <VoiceMicButton
+            t={t}
+            phase={voicePhase}
+            disabled={controlsBlocked}
+            onToggle={onVoiceToggle}
+          />
+        )}
         {runActive && !hasDraftContent ? (
           <TooltipButton
             type="button"

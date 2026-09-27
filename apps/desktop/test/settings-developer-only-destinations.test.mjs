@@ -1,10 +1,15 @@
 /**
  * Developer-only settings destinations contract.
  *
- * Voice, Cloud sync, and Remote Hosts are experimental surfaces that exist only while
+ * Cloud sync and Remote Hosts are experimental surfaces that exist only while
  * developer mode is on. The rail, page, and settings search must add and drop
  * them together, and a stale selection must fall back to General instead of
  * rendering a page the rail no longer offers.
+ *
+ * Voice is deliberately no longer among them: dictation ships enabled, so its
+ * settings have to be reachable without turning developer mode on first. It
+ * keeps its experimental badge, so the three cases below check both halves —
+ * the two gated destinations and the one that was un-gated.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -33,18 +38,16 @@ test("developer mode alone decides which destinations exist", () => {
 
   assert.equal(off.includes("sync"), false);
   assert.equal(on.includes("sync"), true);
-  assert.equal(off.includes("voice"), false);
-  assert.equal(on.includes("voice"), true);
   assert.equal(off.includes("remoteHosts"), false);
   assert.equal(on.includes("remoteHosts"), true);
-  assert.deepEqual(
-    off,
-    on.filter((id) => id !== "voice" && id !== "sync" && id !== "remoteHosts"),
-  );
+  // Un-gated: present with developer mode off, and unaffected by turning it on.
+  assert.equal(off.includes("voice"), true);
+  assert.equal(on.includes("voice"), true);
+  assert.deepEqual(off, on.filter((id) => id !== "sync" && id !== "remoteHosts"));
   // Both gated destinations carry the badge rendered by the rail and title.
   assert.deepEqual(
     SETTINGS_NAV.filter((entry) => entry.developerOnly === true).map((entry) => entry.id),
-    ["voice", "sync", "remoteHosts"],
+    ["sync", "remoteHosts"],
   );
   assert.ok(
     SETTINGS_NAV.filter((entry) => entry.developerOnly === true)
@@ -66,7 +69,11 @@ test("settings search mirrors the rail", () => {
       .some((hit) => hit.tab === "sync"),
   );
   assert.deepEqual(searchSettings("remotehosts", identity, { developerMode: false }), []);
-  assert.deepEqual(searchSettings("voiceEnable", identity, { developerMode: false }), []);
+  // Voice is searchable either way, because the rail offers it either way.
+  assert.ok(
+    searchSettings("voiceEnable", identity, { developerMode: false })
+      .some((hit) => hit.tab === "voice"),
+  );
   assert.ok(
     searchSettings("voiceEnable", identity, { developerMode: true })
       .some((hit) => hit.tab === "voice"),
@@ -81,7 +88,7 @@ test("a stale developer-only selection is reported as hidden", () => {
   assert.equal(isSettingsDestinationHidden("sync", true), false);
   assert.equal(isSettingsDestinationHidden("remoteHosts", false), true);
   assert.equal(isSettingsDestinationHidden("remoteHosts", true), false);
-  assert.equal(isSettingsDestinationHidden("voice", false), true);
+  assert.equal(isSettingsDestinationHidden("voice", false), false);
   assert.equal(isSettingsDestinationHidden("voice", true), false);
   assert.equal(isSettingsDestinationHidden("general", false), false);
 });

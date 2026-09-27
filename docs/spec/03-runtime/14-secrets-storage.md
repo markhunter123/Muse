@@ -51,13 +51,22 @@ type SecretMeta = {
 ```text
 secret:provider:<providerId>:api_key
 secret:provider:<providerId>:oauth
+secret:voice:tencent:secret_id
+secret:voice:tencent:secret_key
 ```
 
-The two refs are independent, so one provider row may hold an API key, a vendor
-account, or both. The OAuth ref stores the serialized pi-ai `OAuthCredential`
-(access token, refresh token, expiry) written through the generic `secrets.set`
-path, so it is encrypted by the same backend but is not indexed in
-`secrets_meta`; provider delete clears both refs and any metadata row for them.
+The two provider refs are independent, so one provider row may hold an API key,
+a vendor account, or both. The OAuth ref stores the serialized pi-ai
+`OAuthCredential` (access token, refresh token, expiry) written through the
+generic `secrets.set` path, so it is encrypted by the same backend but is not
+indexed in `secrets_meta`; provider delete clears both refs and any metadata row
+for them.
+
+The voice refs hold the Tencent Cloud ASR pair (§[23-voice-input.md](23-voice-input.md)).
+They are two refs rather than one serialized blob because the signing key and
+the account id are entered as separate fields and either can be rotated alone;
+a reader treats one half without the other as "not configured", since neither
+signs a request on its own.
 
 ## 4a. Provider readiness flags
 

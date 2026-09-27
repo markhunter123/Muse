@@ -21,6 +21,13 @@ export interface VoiceState {
   durationSeconds: number;
   volumeLevel: number;
   error?: string;
+  /**
+   * Why the session was refused. Left as a plain string: the renderer only
+   * looks it up in the catalog, and a code with no copy falls back to
+   * `error`, so mirroring the recognizer's union here would buy a second
+   * list to keep in step and nothing else.
+   */
+  errorCode?: string;
   result?: {
     text: string;
     speechSeconds: number;
@@ -82,12 +89,20 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         await voiceIpc.stop();
       }
     } catch (error) {
-      setState({
-        phase: "error",
-        durationSeconds: 0,
-        volumeLevel: 0,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      // A refused start reaches here twice: once as the recognizer's coded
+      // state event, then as the rejection of this call. Overwriting would
+      // replace the code — and with it the translated message — with the raw
+      // English detail, so the state already in hand wins.
+      setState((current) =>
+        current.phase === "error"
+          ? current
+          : {
+              phase: "error",
+              durationSeconds: 0,
+              volumeLevel: 0,
+              error: error instanceof Error ? error.message : String(error),
+            },
+      );
     }
   }, [enabled, state.phase]);
 

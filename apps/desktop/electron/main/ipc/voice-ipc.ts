@@ -54,4 +54,17 @@ export function registerVoiceIpc({
   handle(IPC.invoke.voiceRequestPermission, () =>
     voiceService.requestPermission(),
   );
+
+  // Credentials go in and never come back out; the status call answers
+  // "configured or not", which is all the form needs to render.
+  handle(IPC.invoke.voiceSetCredentials, (input: unknown) =>
+    voiceService.setCredentials(input as { secretId?: unknown; secretKey?: unknown }),
+  );
+
+  handle(IPC.invoke.voiceClearCredentials, async () => {
+    await voiceService.clearCredentials();
+    return { ok: true };
+  });
+
+  handle(IPC.invoke.voiceCredentialStatus, () => voiceService.credentialStatus());
 }

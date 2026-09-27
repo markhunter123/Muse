@@ -15,6 +15,7 @@ import {
   imageGenerationBindings,
   isImageGenerationModel,
   normalizeLargePasteThreshold,
+  resolveVoiceInputSettings,
   stripInlineComposerFileReferenceTokens,
 } from "@muse/shared";
 import { useAppStore } from "../stores/app-store";
@@ -59,6 +60,7 @@ import { ComposerInput } from "../features/chat/composer/ComposerInput";
 import { useComposerModelMenu } from "../features/chat/composer/hooks/useComposerModelMenu";
 import { ComposerToolbar } from "../features/chat/composer/ComposerToolbar";
 import { useVoiceInput } from "../features/voice/useVoiceInput";
+import { useVoicePushToTalk } from "../features/voice/useVoicePushToTalk";
 import { VoiceOverlay } from "../features/voice/VoiceOverlay";
 import "../styles/voice.css";
 import { ComposerStatus } from "../features/chat/composer/ComposerStatus";
@@ -441,7 +443,9 @@ export function Composer({
     submit,
   } = submitController;
 
-  const voiceEnabled = !!settings?.voice?.enabled;
+  // Resolved rather than truth-tested: an absent `voice` block means defaults,
+  // and the default is enabled.
+  const voiceEnabled = resolveVoiceInputSettings(settings?.voice).enabled;
   const voice = useVoiceInput({
     enabled: voiceEnabled,
     onTranscriptionComplete: (text) => {
@@ -455,6 +459,30 @@ export function Composer({
       }
     },
   });
+
+  // Hold right Alt to talk. Shares `voice.toggle` with the mic button, so the
+  // two entry points can never disagree about what "recording" means.
+  useVoicePushToTalk({
+    enabled: voiceEnabled,
+    phase: voice.state.phase,
+    onToggle: voice.toggle,
+    onCancel: voice.cancel,
+  });
+
+  // The voice session lives here, but the `voiceToggle` / `voiceCancel`
+  // shortcuts are dispatched from the app shell. Windowing the two together
+  // keeps the session in one owner instead of promoting it to the store.
+  useEffect(() => {
+    if (!voiceEnabled) return;
+    const onToggle = () => void voice.toggle();
+    const onCancel = () => voice.cancel();
+    window.addEventListener("muse:voice-toggle", onToggle);
+    window.addEventListener("muse:voice-cancel", onCancel);
+    return () => {
+      window.removeEventListener("muse:voice-toggle", onToggle);
+      window.removeEventListener("muse:voice-cancel", onCancel);
+    };
+  }, [voiceEnabled, voice.toggle, voice.cancel]);
 
   const composerAc = useComposerAutocomplete({
     value,
@@ -634,7 +662,6 @@ export function Composer({
             voicePhase={voice.state.phase}
             voiceEnabled={voiceEnabled}
             onVoiceToggle={voice.toggle}
-            onVoiceCancel={voice.cancel}
           />
         </div>
       </div>

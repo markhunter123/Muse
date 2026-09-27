@@ -17,8 +17,13 @@ export interface VoiceState {
   durationSeconds: number;
   /** Current volume level 0–1, updated in real-time during listening. */
   volumeLevel: number;
-  /** Error message when phase is "error". */
+  /** Error message when phase is "error". Diagnostic detail, in English. */
   error?: string;
+  /**
+   * Set when the failure is one the UI has copy for, so the message can be
+   * shown in the user's language instead of as raw vendor text.
+   */
+  errorCode?: VoiceErrorCode;
   /** Transcription result when phase is "done". */
   result?: VoiceResult;
 }
@@ -33,6 +38,9 @@ export interface VoiceResult {
 // ---- Voice Settings ----
 export type ChineseVariant = "simplified" | "traditional-taiwan" | "traditional-hong-kong";
 
+/** Which recognizer transcribes captured audio. Mirrors `@muse/shared`. */
+export type VoiceProvider = "local" | "tencent";
+
 export interface VoiceSettings {
   enabled: boolean;
   /** Device ID; null means system default. */
@@ -41,17 +49,11 @@ export interface VoiceSettings {
   languages: string[];
   /** Chinese output variant. */
   chineseVariant: ChineseVariant;
-  /** Model catalog ID. */
+  /** Model catalog ID. Only the `local` provider reads this. */
   modelId: string;
+  /** `local` runs a bundled whisper model; `tencent` calls Tencent Cloud ASR. */
+  provider: VoiceProvider;
 }
-
-export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
-  enabled: false,
-  deviceId: null,
-  languages: ["zh", "en"],
-  chineseVariant: "simplified",
-  modelId: "",
-};
 
 // ---- Model ----
 export interface ModelInfo {
@@ -115,4 +117,48 @@ export interface TranscriptionStream {
   feed(chunk: Float32Array): void;
   finalize(): Promise<string>;
   cancel(): void;
+}
+
+// ---- Recognizer port ----
+
+/**
+ * What a recognizer raises when the user can do something about the failure.
+ * The UI translates by code; `message` stays as English diagnostic detail for
+ * the log and for codes the UI has no copy for.
+ */
+export type VoiceErrorCode =
+  | "noModel"
+  | "credentialsMissing"
+  | "audioTooLong"
+  | "audioTooLarge"
+  | "authFailed"
+  | "requestFailed";
+
+export class VoiceRecognizerError extends Error {
+  readonly code: VoiceErrorCode;
+
+  constructor(code: VoiceErrorCode, message: string) {
+    super(message);
+    this.name = "VoiceRecognizerError";
+    this.code = code;
+  }
+}
+
+/**
+ * What `VoiceController` needs from whatever turns audio into text.
+ *
+ * The bundled whisper engine and a cloud recognizer differ in every detail —
+ * one loads a model, the other signs an HTTP request — so the controller talks
+ * to this port rather than to `TranscriptionEngine` directly. That is also why
+ * `prepare` is part of it: the local engine's "is a model loaded?" check and
+ * the cloud engine's "are there credentials?" check are the same question asked
+ * of different state, and the answer has to arrive before the microphone opens.
+ */
+export interface SpeechRecognizer {
+  /** Ready the recognizer for `settings`, or throw a {@link VoiceRecognizerError}. */
+  prepare(settings: VoiceSettings): Promise<void>;
+  /** A streaming session, or null when only whole buffers are supported. */
+  createStream(options: TranscribeOptions): TranscriptionStream | null;
+  transcribe(pcm: Float32Array, options: TranscribeOptions, signal?: AbortSignal): Promise<string>;
+  shutdown(): Promise<void> | void;
 }

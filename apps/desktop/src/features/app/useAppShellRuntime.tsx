@@ -773,6 +773,15 @@ export function useAppShellRuntime() {
           case "abort":
             void abort();
             break;
+          // These two were declared in KEYBOARD_SHORTCUTS and rebindable in
+          // Settings, but had no case here — pressing them did nothing. They
+          // dispatch to the Composer, which owns the voice session.
+          case "voiceToggle":
+            window.dispatchEvent(new Event("muse:voice-toggle"));
+            break;
+          case "voiceCancel":
+            window.dispatchEvent(new Event("muse:voice-cancel"));
+            break;
           case "toggleWindow":
             // The same native action the menu item runs (D438): hide the window
             // the user is looking at, or bring it back. The window's own close

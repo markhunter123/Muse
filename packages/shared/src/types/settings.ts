@@ -166,6 +166,9 @@ export type AppSettings = {
 
 export type ChineseVariant = "simplified" | "traditional-taiwan" | "traditional-hong-kong";
 
+/** Which recognizer transcribes captured audio. */
+export type VoiceProvider = "local" | "tencent";
+
 export type VoiceInputSettings = {
   enabled: boolean;
   /** Microphone device ID; null means system default. */
@@ -176,7 +179,33 @@ export type VoiceInputSettings = {
   chineseVariant: ChineseVariant;
   /** Catalog model ID. Empty string means no model selected yet. */
   modelId: string;
+  /** `local` runs a bundled whisper model; `tencent` calls Tencent Cloud ASR. */
+  provider: VoiceProvider;
 };
+
+/**
+ * Voice input ships enabled, so an absent `voice` block means "use the
+ * defaults" rather than "off". Read it through {@link resolveVoiceInputSettings}
+ * rather than testing `settings.voice` for truthiness.
+ */
+export const DEFAULT_VOICE_INPUT_SETTINGS: VoiceInputSettings = {
+  enabled: true,
+  deviceId: null,
+  // Both, so the recognizer picks the Mandarin/English/Cantonese model: a
+  // Chinese speaker dictating product names mixes the two mid-sentence.
+  languages: ["zh", "en"],
+  chineseVariant: "simplified",
+  modelId: "",
+  // `tencent` works from a cold install once credentials are entered;
+  // `local` additionally needs a multi-hundred-megabyte model download.
+  provider: "tencent",
+};
+
+export function resolveVoiceInputSettings(
+  value?: Partial<VoiceInputSettings> | null,
+): VoiceInputSettings {
+  return { ...DEFAULT_VOICE_INPUT_SETTINGS, ...(value ?? {}) };
+}
 
 export type LinkOpenTarget = "workpanel" | "external";
 
